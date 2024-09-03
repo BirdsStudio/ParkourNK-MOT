@@ -17,7 +17,9 @@ import cn.nukkit.form.element.ElementButton;
 import cn.nukkit.form.element.ElementButtonImageData;
 import cn.nukkit.form.window.FormWindowSimple;
 import cn.nukkit.item.ItemID;
+import cn.nukkit.level.Location;
 import cn.nukkit.level.Position;
+import cn.nukkit.math.Vector3;
 import cn.nukkit.plugin.PluginBase;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,6 +28,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -84,12 +87,12 @@ public class Parkour extends PluginBase implements Listener {
 
     public void quitFromParkour(Player player) {
         if (!currentPlayingParkour.containsKey(player)) return;
-        var instance = this.currentPlayingParkour.remove(player);
+        IParkourInstance instance = this.currentPlayingParkour.remove(player);
         instance.quit(player);
     }
 
     public void sendParkourInfo(Player player, IParkourInstance instance) {
-        var data = instance.getData();
+        ParkourData data = instance.getData();
         StringBuilder builder = new StringBuilder();
         builder.append("§l§fRanking: \n");
         data.ranking.forEach((name, score) -> {
@@ -100,15 +103,15 @@ public class Parkour extends PluginBase implements Listener {
     }
 
     public void sendParkourListForm(Player player) {
-        var buttons = this.parkourInstanceMap.values()
+        List<ElementButton> buttons = this.parkourInstanceMap.values()
                 .stream()
-                .filter(instance1 -> instance1.isComplete())
-                .map(inst -> generateListButton(inst))
+                .filter(IParkourInstance::isComplete)
+                .map(this::generateListButton)
                 .toList();
-        var form = new FormWindowSimple("§f§lParkour", "", buttons);
+        FormWindowSimple form = new FormWindowSimple("§f§lParkour", "", buttons);
         form.addHandler((player1, i) -> {
             if (form.getResponse() == null) return;
-            var clickedButton = (ParkourElementButton)form.getResponse().getClickedButton();
+            ParkourElementButton clickedButton = (ParkourElementButton) form.getResponse().getClickedButton();
             tpTo(player1, clickedButton.instance);
         });
         player.showFormWindow(form);
@@ -119,35 +122,13 @@ public class Parkour extends PluginBase implements Listener {
     }
 
     protected ElementButton generateListButton(IParkourInstance instance) {
-        var nameBuilder = new StringBuilder();
-        nameBuilder.append("§f§l").append(instance.getData().name).append("\n§bPlaying: ").append(instance.getPlayers().size());
-        return new ParkourElementButton(nameBuilder.toString(), new ElementButtonImageData("path", "textures/blocks/grass_side_carried.png"), instance);
-    }
-
-    protected class ParkourElementButton extends ElementButton {
-
-        @Getter
-        @Setter
-        protected transient IParkourInstance instance;
-
-        public ParkourElementButton(String text) {
-            super(text);
-        }
-
-        public ParkourElementButton(String text, ElementButtonImageData image) {
-            super(text, image);
-        }
-
-        public ParkourElementButton(String text, ElementButtonImageData image, IParkourInstance instance) {
-            super(text, image);
-            this.instance = instance;
-        }
+        return new ParkourElementButton("§f§l" + instance.getData().name + "\n§bPlaying: " + instance.getPlayers().size(), new ElementButtonImageData("path", "textures/blocks/grass_side_carried.png"), instance);
     }
 
     protected void loadParkourInstance() {
         try (Stream<Path> walk = Files.walk(this.dataPath)) {
-            for (var instancePath : walk.filter(Files::isRegularFile).toList()) {
-                var instance = createParkourInstance(instancePath);
+            for (Path instancePath : walk.filter(Files::isRegularFile).toList()) {
+                IParkourInstance instance = createParkourInstance(instancePath);
                 addParkourInstance(instance);
                 this.getLogger().info("[§bParkour§r] Successfully load parkour instance §a" + instance.getData().name);
             }
@@ -162,9 +143,9 @@ public class Parkour extends PluginBase implements Listener {
 
     @EventHandler
     protected void onPlayerMove(PlayerMoveEvent event) {
-        var player = event.getPlayer();
-        var from = event.getFrom().floor();
-        var to = event.getTo().floor();
+        Player player = event.getPlayer();
+        Location from = event.getFrom().floor();
+        Location to = event.getTo().floor();
         if (!from.level.getName().equals(to.level.getName()) && currentPlayingParkour.containsKey(player)) {
             quitFromParkour(player);
             return;
@@ -180,7 +161,7 @@ public class Parkour extends PluginBase implements Listener {
                     }
                 });
             } else {
-                var currentPlaying = currentPlayingParkour.get(player);
+                IParkourInstance currentPlaying = currentPlayingParkour.get(player);
                 if (currentPlaying.isPaused(player)) {
                     return;
                 }
@@ -189,7 +170,7 @@ public class Parkour extends PluginBase implements Listener {
                     currentPlaying.onReachEnd(player);
                     return;
                 }
-                for (var routePoint : currentPlaying.getData().routePoints) {
+                for (Vector3 routePoint : currentPlaying.getData().routePoints) {
                     if (routePoint.floor().equals(to) && !currentPlaying.getLastPoint(player).floor().equals(to)) {
                         currentPlaying.onReachPoint(player, routePoint.floor().add(0.5, 0, 0.5));
                     }
@@ -202,12 +183,12 @@ public class Parkour extends PluginBase implements Listener {
     protected void onPlayerInteractItem(PlayerInteractEvent event) {
         if (event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_AIR
                 && event.getAction() != PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK) return;
-        var player = event.getPlayer();
-        var currentPlaying = currentPlayingParkour.get(player);
+        Player player = event.getPlayer();
+        IParkourInstance currentPlaying = currentPlayingParkour.get(player);
         if (currentPlaying == null) return;
         switch (player.getInventory().getItemInHand().getId()) {
             case BACK_ITEM_ID -> {
-                var lastRoutePoint = currentPlaying.getLastPoint(player);
+                Vector3 lastRoutePoint = currentPlaying.getLastPoint(player);
                 player.teleport(lastRoutePoint);
             }
             case INFO_ITEM_ID -> {
@@ -229,10 +210,30 @@ public class Parkour extends PluginBase implements Listener {
 
     @EventHandler
     protected void onPlayerRespawn(PlayerRespawnEvent event) {
-        var player = event.getPlayer();
-        var currentPlaying = currentPlayingParkour.get(player);
+        Player player = event.getPlayer();
+        IParkourInstance currentPlaying = currentPlayingParkour.get(player);
         if (currentPlaying == null) return;
-        var lastRoutePoint = currentPlaying.getLastPoint(player);
+        Vector3 lastRoutePoint = currentPlaying.getLastPoint(player);
         event.setRespawnPosition(Position.fromObject(lastRoutePoint, player.level));
+    }
+
+    protected class ParkourElementButton extends ElementButton {
+
+        @Getter
+        @Setter
+        protected transient IParkourInstance instance;
+
+        public ParkourElementButton(String text) {
+            super(text);
+        }
+
+        public ParkourElementButton(String text, ElementButtonImageData image) {
+            super(text, image);
+        }
+
+        public ParkourElementButton(String text, ElementButtonImageData image, IParkourInstance instance) {
+            super(text, image);
+            this.instance = instance;
+        }
     }
 }

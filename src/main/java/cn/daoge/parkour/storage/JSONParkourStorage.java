@@ -36,10 +36,6 @@ public class JSONParkourStorage implements IParkourStorage {
 
     @Override
     public void save(ParkourData data) {
-        try {
-            Files.write(this.file, gson.toJson(data).getBytes());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        Files.write(this.file, gson.toJson(data).getBytes());
     }
 }
