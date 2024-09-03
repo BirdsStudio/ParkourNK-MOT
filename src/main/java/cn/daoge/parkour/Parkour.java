@@ -68,9 +68,9 @@ public class Parkour extends PluginBase implements Listener {
 
     @Override
     public void onDisable() {
-        this.parkourInstanceMap.forEach((k, v) -> {
-            v.save();
-        });
+        for (IParkourInstance value : this.parkourInstanceMap.values()) {
+            value.save();
+        }
     }
 
     public void joinTo(Player player, IParkourInstance instance) {
@@ -95,9 +95,7 @@ public class Parkour extends PluginBase implements Listener {
         ParkourData data = instance.getData();
         StringBuilder builder = new StringBuilder();
         builder.append("§l§fRanking: \n");
-        data.ranking.forEach((name, score) -> {
-            builder.append("§l[").append(name).append("]: §b").append(score).append("§f\n");
-        });
+        data.ranking.forEach((name, score) -> builder.append("§l[").append(name).append("]: §b").append(score).append("§f\n"));
         FormWindowSimple form = new FormWindowSimple("§l§b Info | §f§l" + data.name, builder.toString());
         player.showFormWindow(form);
     }
@@ -191,15 +189,9 @@ public class Parkour extends PluginBase implements Listener {
                 Vector3 lastRoutePoint = currentPlaying.getLastPoint(player);
                 player.teleport(lastRoutePoint);
             }
-            case INFO_ITEM_ID -> {
-                sendParkourInfo(player, currentPlaying);
-            }
-            case PAUSE_ITEM_ID -> {
-                currentPlaying.pause(player, !currentPlaying.isPaused(player));
-            }
-            case ESCAPE_ITEM_ID -> {
-                quitFromParkour(player);
-            }
+            case INFO_ITEM_ID -> sendParkourInfo(player, currentPlaying);
+            case PAUSE_ITEM_ID -> currentPlaying.pause(player, !currentPlaying.isPaused(player));
+            case ESCAPE_ITEM_ID -> quitFromParkour(player);
         }
     }
 
